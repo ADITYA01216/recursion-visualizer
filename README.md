@@ -17,5 +17,5 @@ An interactive web-based tool to visualize recursion algorithms and understand f
 ## Live Demo
 https://recursion-visualizer-liart.vercel.app
 
-## Author
-Aditya Agarwal
+## Authors
+Aditya Agarwal, Ausaaf Ahmad
