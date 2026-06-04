@@ -22,6 +22,61 @@ textarea, input { font-family: inherit; outline: none; transition: border 0.2s; 
 .ip-cat-btn:hover { border-color: #c7d2fe; color: #4f46e5; background: #eef2ff; }
 .ip-cat-btn.active { background: #4f46e5; color: white; border-color: #4f46e5; box-shadow: 0 4px 12px rgba(79,70,229,0.3); }
 
+/* Difficulty Filters */
+.ip-diff-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 1.5rem;
+  background: #f8fafc;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+.ip-diff-filters-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
+}
+.ip-diff-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  background: white;
+  border: 1.5px solid #cbd5e1;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.ip-diff-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.ip-diff-btn.active.ip-diff-all {
+  background: #eef2ff;
+  border-color: #4f46e5;
+  color: #4f46e5;
+}
+.ip-diff-btn.active.ip-diff-easy {
+  background: #dcfce7;
+  border-color: #22c55e;
+  color: #15803d;
+}
+.ip-diff-btn.active.ip-diff-medium {
+  background: #fef9c3;
+  border-color: #eab308;
+  color: #854d0e;
+}
+.ip-diff-btn.active.ip-diff-hard {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
 /* Example grid */
 .ip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
 .ip-card { background: white; border: 2px solid #e2e8f0; border-radius: 16px; padding: 1.25rem; text-align: left; display: flex; flex-direction: column; gap: 8px; transition: all 0.2s; }

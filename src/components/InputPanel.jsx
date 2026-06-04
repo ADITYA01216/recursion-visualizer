@@ -36,11 +36,16 @@ const DIFF_COLORS = {
 
 export default function InputPanel({ onVisualize, loading }) {
   const [cat, setCat] = useState('basic');
+  const [diffFilter, setDiffFilter] = useState('All');
   const [problem, setProblem] = useState('');
   const [code, setCode] = useState('');
   const [customMode, setCustomMode] = useState('problem');
 
-  const filtered = cat === 'custom' ? [] : EXAMPLES.filter(e => e.cat === cat);
+  const filtered = cat === 'custom' ? [] : EXAMPLES.filter(e => {
+    const matchCat = e.cat === cat;
+    const matchDiff = diffFilter === 'All' || e.diff === diffFilter;
+    return matchCat && matchDiff;
+  });
 
   function loadExample(ex) {
     onVisualize({ problem: ex.problem, code: '', boardN: 4, isBuiltIn: true });
@@ -71,13 +76,29 @@ export default function InputPanel({ onVisualize, loading }) {
           <button
             key={c.id}
             className={`ip-cat-btn ${cat === c.id ? 'active' : ''}`}
-            onClick={() => setCat(c.id)}
+            onClick={() => { setCat(c.id); setDiffFilter('All'); }}
           >
             <span>{c.emoji}</span>
             <span>{c.label}</span>
           </button>
         ))}
       </div>
+
+      {/* Difficulty Filter */}
+      {cat !== 'custom' && (
+        <div className="ip-diff-filters">
+          <span className="ip-diff-filters-label">Difficulty:</span>
+          {['All', 'Easy', 'Medium', 'Hard'].map(d => (
+            <button
+              key={d}
+              className={`ip-diff-btn ${diffFilter === d ? 'active' : ''} ip-diff-${d.toLowerCase()}`}
+              onClick={() => setDiffFilter(d)}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Example grid */}
       {cat !== 'custom' && (
