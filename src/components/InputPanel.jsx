@@ -43,7 +43,7 @@ export default function InputPanel({ onVisualize, loading }) {
   const filtered = cat === 'custom' ? [] : EXAMPLES.filter(e => e.cat === cat);
 
   function loadExample(ex) {
-    onVisualize({ problem: ex.problem, code: '', boardN: 4 });
+    onVisualize({ problem: ex.problem, code: '', boardN: 4, isBuiltIn: true });
   }
 
   function handleCustomSubmit() {

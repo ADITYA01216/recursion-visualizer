@@ -7,6 +7,7 @@ import Controls from './components/Controls';
 import DebugPanel from './components/DebugPanel';
 import ComplexityChart from './components/ComplexityChart';
 import StackView from './components/StackView';
+import GrowthSimulator from './components/GrowthSimulator';
 import './App.css';
 
 const LEGEND = [
@@ -16,6 +17,7 @@ const LEGEND = [
   { type:'backtrack', label:'Backtrack', color:'#dc2626' },
   { type:'explore',   label:'Explore',   color:'#8b5cf6' },
   { type:'prune',     label:'Prune',     color:'#db2777' },
+  { type:'memo',      label:'Memo Hit',  color:'#94a3b8' },
 ];
 
 export default function App() {
@@ -69,6 +71,23 @@ export default function App() {
     return () => clearInterval(timerRef.current);
   }, [playing, speed, vizData]);
 
+  // ⌨️ Keyboard shortcuts (arrow keys + space)
+  useEffect(() => {
+    if (view !== 'viz' || !vizData) return;
+    const handler = (e) => {
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+      switch (e.key) {
+        case 'ArrowRight': e.preventDefault(); setStep(s => Math.min(vizData.steps.length - 1, s + 1)); break;
+        case 'ArrowLeft':  e.preventDefault(); setStep(s => Math.max(0, s - 1)); break;
+        case ' ':          e.preventDefault(); setPlaying(p => !p); break;
+        case 'Home':       e.preventDefault(); setStep(0); setPlaying(false); break;
+        case 'End':        e.preventDefault(); setStep(vizData.steps.length - 1); setPlaying(false); break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [view, vizData]);
+
   // ✅ Detect recursion type
   function detectVizMode(steps) {
     const childCount = {};
@@ -82,7 +101,7 @@ export default function App() {
     return maxChildren <= 1 ? 'stack' : 'tree';
   }
 
-  async function handleVisualize({ problem, code, boardN }) {
+  async function handleVisualize({ problem, code, boardN, isBuiltIn }) {
     setView('loading');
     setError('');
     setInputCode(code || '');
@@ -90,7 +109,7 @@ export default function App() {
       const r = await fetch('/api/visualize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ problem, code, boardN }),
+        body: JSON.stringify({ problem, code, boardN, isBuiltIn }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Something went wrong');
@@ -102,7 +121,9 @@ export default function App() {
       const type = (data.problemType || '').toLowerCase();
 
       // ✅ Smart visualization mode
-      setVizMode((type === 'nqueens' || type === 'maze') ? 'grid' : 'tree');
+      const typeStr = (type || '').toLowerCase();
+      const isGridMode = typeStr === 'nqueens' || typeStr === 'maze' || typeStr === 'grid' || data.steps?.some(s => s.boardState);
+      setVizMode(isGridMode ? 'grid' : 'tree');
 
       setView('viz');
     } catch (err) {
@@ -122,8 +143,9 @@ export default function App() {
 
   const steps   = vizData?.steps || [];
   const cur     = steps[step];
-  const isGrid  = ['nqueens','maze'].includes((vizData?.problemType||'').toLowerCase());
-  const isArray = vizData?.problemType === 'twopointer' || vizData?.problemType === 'slidingwindow';
+  const problemTypeStr = (vizData?.problemType || '').toLowerCase();
+  const isGrid  = ['nqueens','maze','grid'].includes(problemTypeStr) || steps.some(s => s.boardState);
+  const isArray = problemTypeStr === 'twopointer' || problemTypeStr === 'slidingwindow';
   const codeLines = (inputCode || vizData?.generatedCode || '').split('\n');
   const hasCode   = codeLines.length > 1;
 
@@ -164,7 +186,7 @@ export default function App() {
 
         {/* ✅ FIXED TOGGLE */}
         {(isGrid || vizData?.problemType === 'twopointer' || vizData?.problemType === 'slidingwindow') && (
-  <div className="view-toggle">
+          <div className="view-toggle">
 
             <button
               className={vizMode === 'grid' ? 'active' : ''}
@@ -178,6 +200,23 @@ export default function App() {
               onClick={() => setVizMode('tree')}
             >
               Tree
+            </button>
+          </div>
+        )}
+
+        {(vizData?.problemType === 'fibonacci' || vizData?.problemType === 'fibonacci_memo') && (
+          <div className="view-toggle" style={{ marginLeft: '10px' }}>
+            <button
+              className={vizData.problemType === 'fibonacci' ? 'active' : ''}
+              onClick={() => handleVisualize({ problem: 'fibonacci', code: '', boardN: 4 })}
+            >
+              Naive
+            </button>
+            <button
+              className={vizData.problemType === 'fibonacci_memo' ? 'active' : ''}
+              onClick={() => handleVisualize({ problem: 'fibonacci_memo', code: '', boardN: 4 })}
+            >
+              With Memoization
             </button>
           </div>
         )}
@@ -236,6 +275,7 @@ export default function App() {
             generatedCode={vizData?.generatedCode}
           />
           <ComplexityChart tc={vizData?.timeComplexity} />
+          <GrowthSimulator />
         </aside>
 
       </main>

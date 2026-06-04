@@ -630,49 +630,300 @@ const P = {
   }
 };
 
+function clampBoardSize(value, fallback = 4) {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(n, 1), 8);
+}
+
+function parseBoardSize(problem, code, boardN) {
+  if (boardN) return clampBoardSize(boardN);
+  const text = `${problem || ''} ${code || ''}`.toLowerCase();
+  const patterns = [
+    /\bn\s*=\s*(\d+)/,
+    /(\d+)\s*x\s*\1/,
+    /(\d+)\s*[x×]\s*(\d+)/,
+    /(\d+)\s*queens?/,
+    /queens?\s*(?:for|of|n)?\s*(\d+)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return clampBoardSize(match[1], 4);
+  }
+
+  return 4;
+}
+
+function emptyQueensBoard(n, queens) {
+  return Array.from({ length: n }, (_, row) =>
+    Array.from({ length: n }, (_, col) => (queens[col] === row ? 'Q' : '.'))
+  );
+}
+
+function makeNQueensTrace(n = 4) {
+  const boardSize = clampBoardSize(n);
+  const queens = Array(boardSize).fill(-1);
+  const steps = [];
+  let id = 1;
+  let solved = false;
+  const maxSteps = boardSize <= 5 ? 180 : 260;
+
+  const push = (type, depth, col, row, action, description, highlightLine, parentId = null, extra = {}) => {
+    if (steps.length >= maxSteps) return null;
+    const nodeId = `n${id++}`;
+    steps.push({
+      step: steps.length + 1,
+      nodeId,
+      parentId,
+      label: row == null ? `solve(col=${col})` : `row=${row}, col=${col}`,
+      type,
+      depth,
+      functionName: 'solveNQueens',
+      arguments: row == null ? { col, n: boardSize } : { col, row, n: boardSize },
+      returnValue: type === 'base_case' ? true : type === 'return' ? solved : null,
+      callStack: Array.from({ length: Math.min(col + 1, boardSize + 1) }, (_, i) => `solve(${i})`),
+      localVars: { col, ...(row == null ? {} : { row }), queens: `[${queens.join(',')}]` },
+      highlightLine,
+      boardState: emptyQueensBoard(boardSize, queens),
+      currentAction: action,
+      description,
+      ...extra,
+    });
+    return nodeId;
+  };
+
+  const isSafe = (row, col) => {
+    for (let c = 0; c < col; c++) {
+      const r = queens[c];
+      if (r === row) return { safe: false, reason: `same row as queen at (${r},${c})` };
+      if (Math.abs(r - row) === Math.abs(c - col)) {
+        return { safe: false, reason: `diagonal from queen at (${r},${c})` };
+      }
+    }
+    return { safe: true };
+  };
+
+  const solve = (col, depth, parentId) => {
+    if (steps.length >= maxSteps || solved) return solved;
+    const callId = push(
+      'call',
+      depth,
+      col,
+      null,
+      col === boardSize ? `Base case reached: col == ${boardSize}` : `Try to place a queen in column ${col}`,
+      col === boardSize
+        ? 'All columns are filled, so this branch is a valid solution.'
+        : `Column ${col}: test each row and prune unsafe positions before recursing.`,
+      col === boardSize ? 2 : 3,
+      parentId
+    );
+
+    if (col === boardSize) {
+      push('base_case', depth, col, null, `Solution found for ${boardSize}-Queens`, 'Every queen is placed with no shared row or diagonal.', 2, callId);
+      solved = true;
+      return true;
+    }
+
+    for (let row = 0; row < boardSize && steps.length < maxSteps; row++) {
+      const check = isSafe(row, col);
+      if (!check.safe) {
+        push('prune', depth + 1, col, row, `Skip (${row},${col}): ${check.reason}`, 'Pruning avoids exploring a branch that cannot lead to a valid board.', 4, callId);
+        continue;
+      }
+
+      queens[col] = row;
+      const placeId = push('explore', depth + 1, col, row, `Place queen at (${row},${col})`, 'This position is safe, so recurse to the next column.', 5, callId);
+      if (solve(col + 1, depth + 2, placeId)) return true;
+
+      queens[col] = -1;
+      push('backtrack', depth + 1, col, row, `Backtrack: remove queen from (${row},${col})`, 'The deeper branch failed, so undo this choice and try the next row.', 7, callId);
+    }
+
+    push('return', depth, col, null, `No valid placement in column ${col}`, 'Return false to the previous column so it can try another row.', 8, callId);
+    return false;
+  };
+
+  solve(0, 0, null);
+  if (!solved) {
+    push('return', 0, 0, null, `No solution exists for n=${boardSize}`, 'The search tree was exhausted without filling every column.', 8, null);
+  }
+
+  return {
+    problem: `N-Queens (n=${boardSize}) - backtracking on chessboard`,
+    problemType: 'nqueens',
+    boardSize,
+    timeComplexity: {
+      best: 'O(n!)',
+      average: 'O(n!)',
+      worst: 'O(n!)',
+      space: 'O(n)',
+      note: 'The tracer prunes rows and diagonals, so it avoids the full n^n brute force tree.',
+    },
+    generatedCode: `bool solve(int col) {\n  if (col == n) return true;\n  for (int row = 0; row < n; row++) {\n    if (isSafe(row, col)) {\n      board[row][col] = 'Q';\n      if (solve(col + 1)) return true;\n      board[row][col] = '.';\n    }\n  }\n  return false;\n}`,
+    steps,
+  };
+}
+
+function makeRatMazeTrace(n = 4) {
+  const boardSize = clampBoardSize(n);
+  const baseMaze = [
+    [1, 0, 0, 0, 0, 0, 0, 0],
+    [1, 1, 0, 1, 1, 1, 0, 0],
+    [0, 1, 0, 1, 0, 1, 0, 0],
+    [0, 1, 1, 1, 0, 1, 1, 1],
+    [0, 0, 0, 1, 1, 1, 0, 1],
+    [0, 1, 1, 1, 0, 0, 0, 1],
+    [0, 1, 0, 1, 1, 1, 1, 1],
+    [0, 1, 1, 1, 0, 0, 0, 1],
+  ];
+  const maze = baseMaze.slice(0, boardSize).map(row => row.slice(0, boardSize));
+  maze[0][0] = 1;
+  maze[boardSize - 1][boardSize - 1] = 1;
+  const view = maze.map(row => row.slice());
+  const visited = Array.from({ length: boardSize }, () => Array(boardSize).fill(false));
+  const steps = [];
+  let id = 1;
+  const maxSteps = boardSize <= 5 ? 180 : 260;
+
+  const push = (type, depth, x, y, action, description, highlightLine, parentId = null, returnValue = null) => {
+    if (steps.length >= maxSteps) return null;
+    const nodeId = `n${id++}`;
+    steps.push({
+      step: steps.length + 1,
+      nodeId,
+      parentId,
+      label: `solve(${x},${y})`,
+      type,
+      depth,
+      functionName: 'solveMaze',
+      arguments: { x, y, n: boardSize },
+      returnValue,
+      callStack: Array.from({ length: depth + 1 }, (_, i) => `solve(depth ${i})`),
+      localVars: { x, y },
+      highlightLine,
+      boardState: view.map(row => row.slice()),
+      currentAction: action,
+      description,
+    });
+    return nodeId;
+  };
+
+  const isSafe = (x, y) => x >= 0 && y >= 0 && x < boardSize && y < boardSize && maze[x][y] === 1 && !visited[x][y];
+  const dirs = [
+    ['Down', 1, 0],
+    ['Right', 0, 1],
+    ['Up', -1, 0],
+    ['Left', 0, -1],
+  ];
+
+  const solve = (x, y, depth, parentId) => {
+    if (steps.length >= maxSteps) return false;
+    const callId = push('call', depth, x, y, `Visit cell (${x},${y})`, 'Check bounds, wall status, and whether this cell was already used.', 3, parentId);
+
+    if (!isSafe(x, y)) {
+      push('prune', depth, x, y, `Reject (${x},${y})`, 'This cell is outside the maze, blocked, or already visited.', 3, callId, false);
+      return false;
+    }
+
+    visited[x][y] = true;
+    view[x][y] = 2;
+    push('explore', depth, x, y, `Mark (${x},${y}) as current`, 'The rat can stand here, so mark it and try neighboring cells.', 4, callId);
+
+    if (x === boardSize - 1 && y === boardSize - 1) {
+      view[x][y] = 3;
+      push('base_case', depth, x, y, 'Destination reached', 'Bottom-right cell reached, so the recursive search returns true.', 2, callId, true);
+      return true;
+    }
+
+    for (const [name, dx, dy] of dirs) {
+      const nx = x + dx;
+      const ny = y + dy;
+      push('call', depth + 1, nx, ny, `Try ${name} to (${nx},${ny})`, `Recursive call explores the ${name.toLowerCase()} neighbor.`, 5, callId);
+      if (solve(nx, ny, depth + 2, callId)) {
+        view[x][y] = 3;
+        push('return', depth, x, y, `Keep (${x},${y}) on final path`, 'A child returned true, so this cell belongs to the solution path.', 5, callId, true);
+        return true;
+      }
+    }
+
+    view[x][y] = 1;
+    visited[x][y] = false;
+    push('backtrack', depth, x, y, `Backtrack from (${x},${y})`, 'All directions failed from here, so unmark this cell and return false.', 7, callId, false);
+    return false;
+  };
+
+  const found = solve(0, 0, 0, null);
+  if (!found) {
+    push('return', 0, 0, 0, 'No path found', 'The search exhausted every reachable path without reaching the destination.', 8, null, false);
+  }
+
+  return {
+    problem: `Rat in Maze (${boardSize}x${boardSize}) - backtracking path search`,
+    problemType: 'maze',
+    boardSize,
+    timeComplexity: {
+      best: 'O(n^2)',
+      average: 'O(4^(n^2))',
+      worst: 'O(4^(n^2))',
+      space: 'O(n^2)',
+      note: 'Each open cell may branch to up to four neighbors; visited cells prevent cycles.',
+    },
+    generatedCode: `bool solve(int x, int y) {\n  if (x == n - 1 && y == n - 1) return true;\n  if (!isSafe(x, y)) return false;\n  visited[x][y] = true;\n  for (auto [dx, dy] : directions) {\n    if (solve(x + dx, y + dy)) return true;\n  }\n  visited[x][y] = false;\n  return false;\n}`,
+    steps,
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { code, problem, boardN, mode } = req.body;
   const p = (problem || '').toLowerCase();
   const c = (code || '').toLowerCase();
-  const n = boardN || 4;
+  const n = parseBoardSize(problem, code, boardN);
 
   // ============================================
   // DEBUG MODE — AI analyzes buggy code
   // ============================================
   if (mode === 'debug') {
-    const DEBUG_PROMPT = `You are an expert C++ recursion debugger for CS students.
-Analyze the given recursive/backtracking C++ code and find bugs, issues, and improvements.
+    const DEBUG_PROMPT = `You are RecurseViz's expert C++ recursion debugger, built to teach CS students.
+Your job is to deeply analyze recursive/backtracking C++ code, find ALL bugs, explain WHY each bug causes wrong behavior, and teach the student how to fix it.
 
 Return ONLY a valid JSON object with this exact structure:
 {
-  "hasErrors": true,
-  "overallAssessment": "One sentence summary of the code quality",
+  "hasErrors": true/false,
+  "overallAssessment": "2-3 sentence summary: what the code tries to do, and what's wrong overall",
   "bugs": [
     {
       "severity": "critical|warning|suggestion",
       "line": 5,
-      "code": "exact buggy code snippet",
-      "issue": "Clear explanation of what is wrong",
-      "fix": "Exact corrected code",
-      "explanation": "WHY this is a bug and HOW the fix works"
+      "code": "exact buggy code snippet from that line",
+      "issue": "Clear, student-friendly explanation of what is wrong",
+      "fix": "Exact corrected code for that line",
+      "explanation": "DETAILED explanation: 1) What happens when this buggy line runs, 2) Why it produces wrong output, 3) How the fix solves it. Use a concrete example if possible.",
+      "category": "base_case|recursion_params|backtracking|off_by_one|infinite_recursion|return_value|boundary|logic"
     }
   ],
-  "timeComplexity": "O(?) with explanation",
-  "spaceComplexity": "O(?) with explanation",
-  "suggestions": ["improvement 1", "improvement 2"],
-  "correctedCode": "Full corrected version of the code"
+  "executionTrace": "Walk through 3-4 recursive calls showing how the bug manifests. Example: 'f(5) calls f(4) calls f(3)... at f(0) the base case returns X instead of Y because...'",
+  "timeComplexity": "O(?) — explain why in 1-2 sentences",
+  "spaceComplexity": "O(?) — explain why in 1-2 sentences",
+  "suggestions": ["actionable improvement 1", "actionable improvement 2"],
+  "correctedCode": "Full corrected version of the code with // FIXED comments on changed lines"
 }
 
-Be specific about line numbers. Focus on:
-- Missing or wrong base cases (most common student error)
-- Wrong recursion parameters
-- Missing backtracking (forgetting to undo)
-- Off-by-one errors
-- Infinite recursion risks
-- Wrong termination conditions
-- Return statement issues`;
+ANALYSIS PRIORITIES (check ALL of these):
+1. Missing or wrong base cases — THE #1 student mistake
+2. Wrong recursion parameters (off-by-one, wrong variable passed)
+3. Missing backtracking (forgetting to undo state changes)
+4. Infinite recursion risks (base case never reached)
+5. Wrong return statement (returning void when should return value, or wrong value)
+6. Array/boundary out-of-bounds errors
+7. Missing memoization for overlapping subproblems
+8. Wrong loop bounds in backtracking
+9. Not handling edge cases (n=0, empty input)
+10. Logical errors in constraint checking
+
+Be SPECIFIC with line numbers. Be EDUCATIONAL in explanations — teach, don't just tell.`;
 
     try {
       const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -685,9 +936,9 @@ Be specific about line numbers. Focus on:
           model: 'llama-3.3-70b-versatile',
           messages: [
             { role: 'system', content: DEBUG_PROMPT },
-            { role: 'user', content: `Analyze this C++ recursive code for bugs:\n\n${code}` }
+            { role: 'user', content: `Analyze this C++ recursive code for bugs. Be thorough and educational:\n\n${code}` }
           ],
-          max_tokens: 3000,
+          max_tokens: 4500,
           temperature: 0.1,
           response_format: { type: 'json_object' }
         })
@@ -711,8 +962,8 @@ Be specific about line numbers. Focus on:
   // Smart routing to hardcoded examples
   if (p.includes('fibonacci') || p.includes('fib')) return res.status(200).json(P.fibonacci);
   if (p.includes('factorial') || p.includes('fact')) return res.status(200).json(P.factorial);
-  if ((p.includes('queen') || c.includes('queen')) && n === 4) return res.status(200).json(P.nqueens);
-  if ((p.includes('maze') || p.includes('rat in') || p.includes('rat maze') || c.includes('maze')) && n === 4) return res.status(200).json(P.ratmaze);
+  if (p.includes('queen') || c.includes('queen') || c.includes('nqueen')) return res.status(200).json(makeNQueensTrace(n));
+  if (p.includes('maze') || p.includes('rat in') || p.includes('rat maze') || c.includes('maze') || c.includes('solvemaze')) return res.status(200).json(makeRatMazeTrace(n));
   if (p.includes('hanoi') || p.includes('tower')) return res.status(200).json(P.hanoi);
   if (p.includes('binary search') || p.includes('binarysearch') || c.includes('binarysearch')) return res.status(200).json(P.binarysearch);
   if (p.includes('merge sort') || p.includes('mergesort') || c.includes('mergesort')) return res.status(200).json(P.mergesort);
@@ -728,59 +979,87 @@ Be specific about line numbers. Focus on:
   if (p.includes('flood') || p.includes('flood fill') || c.includes('floodfill')) return res.status(200).json(P.floodfill);
   if (p.includes('power') || p.includes('exponent')) return res.status(200).json(P.powerfunction);
   if (p.includes('graph') || p.includes('dfs') || p.includes('depth first')) return res.status(200).json(P.graphdfs);
+
   // AI for custom problems
   const isMaze = c.includes('maze') || c.includes('solvemaze') || p.includes('maze') || p.includes('rat in');
   const isNQ = c.includes('queen') || c.includes('nqueen') || p.includes('queen');
   const isGrid = isMaze || isNQ;
 
-  const PROMPT = `You are an expert C++ recursion and 2-pointer visualizer for students. Return ONLY raw JSON.
+  const PROMPT = `You are RecurseViz — an expert recursion visualizer built for CS students.
+Your ONLY job: produce a DEEP, EDUCATIONAL, step-by-step recursion trace as JSON.
 
-CRITICAL: If the provided code or problem is too complex, not a simple recursive or 2-pointer algorithm, return EXACTLY this JSON:
+## YOUR MISSION
+Take the user's problem description or C++ code and produce a full recursive execution trace that helps them TRULY UNDERSTAND what is happening at every step.
+
+## RULES (follow ALL exactly)
+
+1. Generate **25 to 40 steps** — NEVER less than 20.  Show the COMPLETE execution, including ALL recursive calls, base cases, returns, backtracks, and pruning.
+
+2. Each step MUST have ALL of these fields:
+   - "step": sequential integer starting from 1
+   - "nodeId": unique id like "n1","n2",... (NEVER reuse)
+   - "parentId": nodeId of the caller (null for root)
+   - "label": short label for tree node, e.g. "fib(3)" or "solve(col=2)"
+   - "type": one of "call","base_case","return","backtrack","explore","prune","memo"
+   - "depth": recursion depth (0 for root, +1 per level)
+   - "functionName": name of the recursive function
+   - "arguments": object with parameter names and current values
+   - "returnValue": value returned (null if not returning yet)
+   - "callStack": array of strings showing current call stack, e.g. ["fib(5)","fib(4)","fib(3)"]
+   - "localVars": object with ALL relevant local variables and their current values
+   - "highlightLine": which line of the code is executing (1-indexed)
+   - "currentAction": SHORT (≤60 chars) action summary with emoji, e.g. "BASE CASE ✓ n=0, return 1"
+   - "description": DETAILED educational explanation (2-4 sentences) explaining WHY this step happens, connecting it to the algorithm's logic. Teach the student something at every step.
+   ${isGrid ? '- "boardState": 2D array showing current board state' : ''}
+
+3. EDUCATIONAL DESCRIPTIONS must:
+   - Explain the REASONING, not just what happens
+   - Point out patterns ("This is the DIVIDE step of divide-and-conquer")
+   - Warn about common mistakes ("Without this base case, you'd get infinite recursion")
+   - Show the math when relevant ("fib(3) = fib(2) + fib(1) = 1 + 1 = 2")
+   - Compare to alternatives ("With memoization, we'd skip this repeated computation")
+
+4. If the user's code has BUGS, still trace it BUT:
+   - Add a "bugDetected" field (boolean) to steps where the bug manifests
+   - Add a "bugExplanation" field explaining what goes wrong and why
+   - Mark the step type as the appropriate type but note the issue in the description
+
+5. The tree structure MUST be correct:
+   - Root node has parentId: null
+   - Every non-root node's parentId must reference an existing nodeId
+   - parentId chain must form a valid tree (no cycles)
+   - Depth must increase by 1 for each child level
+
+6. CALL STACK must accurately reflect the current state of the call stack.
+
+7. If the user provides code, generate the trace for THAT exact code.
+   If they describe a problem, write clean C++ code first (in "generatedCode") then trace it.
+
+${isGrid ? `GRID RULES:
+- Every step MUST have "boardState" as a 2D array
+- N-Queens: "." = empty, "Q" = queen placed
+- Maze: 0=wall, 1=open, 2=current_position, 3=correct_path` : ''}
+
+## OUTPUT FORMAT (raw JSON only, no markdown)
 {
-  "error": "Code is too complex. Please provide a simple recursive or two-pointer code."
-}
-
-${isGrid ? `CRITICAL: Every step MUST have "boardState" array.
-For N-Queens: "." empty, "Q" queen placed.
-For Maze: 0=wall, 1=open, 2=rat_current, 3=correct_path.` : ''}
-
-Otherwise, return the following JSON structure:
-{
-  "problem": "clear description",
+  "problem": "Clear problem title with input details",
   "problemType": "${isNQ ? 'nqueens' : isMaze ? 'maze' : 'general'}",
-  "generatedCode": "C++ code if generated, else empty string",
+  "generatedCode": "Clean C++ code with line numbers in comments",
   "boardSize": ${isGrid ? n : 0},
   "timeComplexity": {
-    "best": "O(?)",
-    "average": "O(?)",
-    "worst": "O(?)",
-    "space": "O(?)",
-    "note": "explanation"
+    "best": "O(?)", "average": "O(?)", "worst": "O(?)", "space": "O(?)",
+    "note": "2-3 sentence explanation of WHY this complexity, when it matters, and how to optimize"
   },
-  "steps": [
-    {
-      "step": 1,
-      "nodeId": "n1",
-      "parentId": null,
-      "label": "func(x)",
-      "type": "call",
-      "depth": 0,
-      "functionName": "func",
-      "arguments": {},
-      "returnValue": null,
-      "callStack": ["func(x)"],
-      "localVars": {},
-      "highlightLine": 1,
-      "currentAction": "Short action description",
-      "boardState": ${isGrid ? `[[".",".",".","."],[".",".",".","."],[".",".",".","."],[".",".",".","."]]` : 'null'},
-      "description": "Educational explanation"
-    }
-  ]
+  "steps": [ ... 25-40 step objects as described above ... ]
 }
 
-Rules: unique nodeIds, depth 0 for root, 20-40 steps, ONLY return JSON`;
+RETURN ONLY THE JSON. No markdown fences, no explanation outside JSON.`;
 
   try {
+    const userMsg = code
+      ? `Trace this C++ recursive code step by step. If it has bugs, mark them.\n\nCode:\n${code}${problem ? `\n\nContext: ${problem}` : ''}`
+      : `Create a recursive solution for this problem, then trace it step by step with deep educational explanations:\n\n${problem}`;
+
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -791,10 +1070,10 @@ Rules: unique nodeIds, depth 0 for root, 20-40 steps, ONLY return JSON`;
         model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: PROMPT },
-          { role: 'user', content: `Visualize. Return ONLY JSON.\n\nProblem: ${problem || 'trace'}\n\n${code ? `Code:\n${code}` : ''}` }
+          { role: 'user', content: userMsg }
         ],
-        max_tokens: 6000,
-        temperature: 0.1,
+        max_tokens: 8000,
+        temperature: 0.15,
         response_format: { type: 'json_object' }
       })
     });
@@ -802,13 +1081,21 @@ Rules: unique nodeIds, depth 0 for root, 20-40 steps, ONLY return JSON`;
     if (!r.ok) return res.status(500).json({ error: data.error?.message || 'API error' });
     const raw = data.choices?.[0]?.message?.content || '';
     const s = raw.indexOf('{'), e = raw.lastIndexOf('}');
-    if (s === -1) return res.status(400).json({ error: 'Try again.' });
+    if (s === -1) return res.status(400).json({ error: 'Could not parse response. Please try again.' });
     const parsed = JSON.parse(raw.slice(s, e + 1));
     if (parsed.error) return res.status(400).json({ error: parsed.error });
-    if (!parsed.steps?.length) return res.status(400).json({ error: 'No steps. Try again.' });
+    if (!parsed.steps?.length) return res.status(400).json({ error: 'No trace generated. Try rephrasing your question.' });
+
+    // Validate and fix parent-child relationships
+    const validIds = new Set(parsed.steps.map(s => s.nodeId));
+    parsed.steps.forEach((step, i) => {
+      if (step.parentId && !validIds.has(step.parentId)) step.parentId = null;
+      if (!step.nodeId) step.nodeId = `n${i + 1}`;
+      if (step.depth === undefined) step.depth = 0;
+    });
+
     res.status(200).json(parsed);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 }
-

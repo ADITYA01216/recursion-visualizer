@@ -6,6 +6,12 @@ const SEV_COLORS = {
   suggestion: { bg:'#dbeafe', border:'#93c5fd', text:'#1d4ed8', icon:'🔵' },
 };
 
+const CAT_LABELS = {
+  base_case: '🎯 Base Case', recursion_params: '🔄 Params', backtracking: '↩ Backtrack',
+  off_by_one: '±1 Off-by-one', infinite_recursion: '♾ Infinite', return_value: '↑ Return',
+  boundary: '🚧 Boundary', logic: '🧠 Logic',
+};
+
 export default function DebugPanel({ onClose }) {
   const [code, setCode] = useState('');
   const [result, setResult] = useState(null);
@@ -105,6 +111,13 @@ export default function DebugPanel({ onClose }) {
             {/* Bugs tab */}
             {activeTab === 'bugs' && (
               <div className="debug-bugs">
+                {/* Execution Trace */}
+                {result.executionTrace && (
+                  <div style={{marginTop:12,marginBottom:12,padding:'10px 14px',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8}}>
+                    <p style={{fontWeight:700,fontSize:12,color:'#15803d',marginBottom:6}}>🔍 How the bug manifests at runtime:</p>
+                    <p style={{fontSize:12,color:'#166534',lineHeight:1.6,fontFamily:'monospace',whiteSpace:'pre-wrap'}}>{result.executionTrace}</p>
+                  </div>
+                )}
                 {(!result.bugs || result.bugs.length === 0) ? (
                   <div className="debug-no-bugs">
                     <div style={{fontSize:48}}>✅</div>
@@ -129,6 +142,11 @@ export default function DebugPanel({ onClose }) {
                           </span>
                           {bug.line && (
                             <span className="debug-bug-line">Line {bug.line}</span>
+                          )}
+                          {bug.category && CAT_LABELS[bug.category] && (
+                            <span style={{fontSize:10,padding:'2px 8px',background:'#f1f5f9',borderRadius:10,color:'#475569',fontWeight:600}}>
+                              {CAT_LABELS[bug.category]}
+                            </span>
                           )}
                         </div>
                         <p className="debug-bug-issue" style={{color:sc.text}}>{bug.issue}</p>
