@@ -207,8 +207,10 @@ export default function TreeView({ steps, currentStep }) {
     (children[id] || []).forEach(cid => {
       if (!pos[cid]) return;
       const cp = pos[cid];
-      const isCurrent = statuses[cid] === 'current';
+      const childStatus = statuses[cid] || 'call';
+      const isCurrent = childStatus === 'current';
       const isNew = cid === newNodeId;
+      const edgeColor = C[childStatus]?.stroke || '#64748b';
       // Curved path
       const midY = (p.y + R + cp.y - R) / 2;
       edgeElements.push(
@@ -216,9 +218,9 @@ export default function TreeView({ steps, currentStep }) {
           key={`e-${id}-${cid}`}
           d={`M${p.x},${p.y + R} C${p.x},${midY} ${cp.x},${midY} ${cp.x},${cp.y - R}`}
           fill="none"
-          stroke={isCurrent ? '#16a34a' : '#64748b'}
-          strokeWidth={isCurrent ? 3.5 : 2.5}
-          opacity={isCurrent ? 1 : 0.6}
+          stroke={edgeColor}
+          strokeWidth={isCurrent ? 4.5 : 3.5}
+          opacity={isCurrent ? 1 : 0.75}
           className={isNew ? 'tv-edge-enter' : ''}
           pathLength="1"
         />
