@@ -1,10 +1,10 @@
 import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 
 /* ─── Layout constants ─── */
-const NR   = 34;
-const HGAP = 190;
-const VGAP = 150;
-const PAD  = 100;
+const NR   = 32;
+const HGAP = 110;
+const VGAP = 100;
+const PAD  = 60;
 
 /* ─── Node palette per step-type ─── */
 const PALETTE = {
@@ -93,9 +93,9 @@ export default function TreeView({ steps, currentStep }) {
   const fitScreen = useCallback(() => {
     if (!layout || !boxRef.current) return;
     const el = boxRef.current;
-    const sx = (el.clientWidth  - 60) / layout.w;
-    const sy = (el.clientHeight - 60) / layout.h;
-    const ns = Math.min(sx, sy, 1.4);
+    const sx = (el.clientWidth  - 40) / layout.w;
+    const sy = (el.clientHeight - 40) / layout.h;
+    const ns = Math.max(0.45, Math.min(sx, sy, 1.4));
     setCam({ s: ns, x: (el.clientWidth - layout.w * ns) / 2, y: (el.clientHeight - layout.h * ns) / 2 });
   }, [layout]);
 
@@ -142,6 +142,7 @@ export default function TreeView({ steps, currentStep }) {
     (kids[id] || []).forEach(cid => {
       const cp = pos[cid]; if (!cp) return;
       const vis = status[cid] && status[cid] !== 'pending';
+      if (!vis && status[cid] !== 'current') return; // Skip edges to unvisited nodes
       const cur = status[cid] === 'current';
       const isNew = newSet.has(cid);
       const my = (p.y + NR + cp.y - NR) / 2;
@@ -165,12 +166,14 @@ export default function TreeView({ steps, currentStep }) {
   Object.keys(nodes).forEach(id => {
     const p = pos[id]; if (!p) return;
     const st = status[id] || 'pending';
+    const isPending = st === 'pending';
+    if (isPending) return; // Don't render unvisited nodes — cleaner view
     const c  = PALETTE[st] || PALETTE.pending;
     const cur = st === 'current';
     const isNew = newSet.has(id);
     const lbl = nodes[id].label;
     const short = lbl.length > 13 ? lbl.slice(0, 12) + '…' : lbl;
-    const fs = short.length > 9 ? 9 : short.length > 6 ? 10 : 11.5;
+    const fs = short.length > 9 ? 10 : short.length > 6 ? 11.5 : 13;
 
     circles.push(
       <g key={id} transform={`translate(${p.x},${p.y})`}
