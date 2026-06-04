@@ -1,159 +1,224 @@
 import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 
-/* ─── Layout constants ─── */
-const NR   = 32;
-const HGAP = 110;
-const VGAP = 100;
-const PAD  = 60;
+/* ─── Visual constants ─── */
+const R    = 44;       // node radius — BIG like VisuAlgo
+const HGAP = 100;      // horizontal gap between siblings
+const VGAP = 110;      // vertical gap between levels
+const PAD  = 60;       // canvas padding
 
-/* ─── Node palette per step-type ─── */
-const PALETTE = {
-  call:      { fill:'#dbeafe', stroke:'#3b82f6', text:'#1d4ed8', g:'59,130,246'  },
-  base_case: { fill:'#dcfce7', stroke:'#22c55e', text:'#15803d', g:'34,197,94'   },
-  return:    { fill:'#fef9c3', stroke:'#eab308', text:'#854d0e', g:'234,179,8'   },
-  backtrack: { fill:'#fee2e2', stroke:'#ef4444', text:'#991b1b', g:'239,68,68'   },
-  explore:   { fill:'#ede9fe', stroke:'#8b5cf6', text:'#5b21b6', g:'139,92,246'  },
-  prune:     { fill:'#fce7f3', stroke:'#ec4899', text:'#9d174d', g:'236,72,153'  },
-  memo:      { fill:'#f1f5f9', stroke:'#94a3b8', text:'#475569', g:'148,163,184' },
-  current:   { fill:'#bbf7d0', stroke:'#16a34a', text:'#14532d', g:'22,163,74'   },
-  pending:   { fill:'#f8fafc', stroke:'#d1d5db', text:'#9ca3af', g:'209,213,219' },
+/* ─── Colors per step type ─── */
+const C = {
+  call:      { fill:'#dbeafe', stroke:'#3b82f6', text:'#1e40af', glow:'59,130,246'  },
+  base_case: { fill:'#dcfce7', stroke:'#16a34a', text:'#14532d', glow:'22,163,74'   },
+  return:    { fill:'#fef9c3', stroke:'#ca8a04', text:'#713f12', glow:'202,138,4'   },
+  backtrack: { fill:'#fee2e2', stroke:'#dc2626', text:'#7f1d1d', glow:'220,38,38'   },
+  explore:   { fill:'#ede9fe', stroke:'#7c3aed', text:'#4c1d95', glow:'124,58,237'  },
+  prune:     { fill:'#fce7f3', stroke:'#db2777', text:'#831843', glow:'219,39,119'  },
+  memo:      { fill:'#f0f9ff', stroke:'#0284c7', text:'#0c4a6e', glow:'2,132,199'   },
+  current:   { fill:'#bbf7d0', stroke:'#16a34a', text:'#052e16', glow:'22,163,74'   },
 };
 
-/* ─── Tree layout builder ─── */
-function buildLayout(steps) {
-  const nodes = {}, kids = {}, order = [];
-  for (const s of steps) {
-    if (nodes[s.nodeId]) continue;
-    nodes[s.nodeId] = { id: s.nodeId, pid: s.parentId || null, label: s.label || s.nodeId, depth: s.depth ?? 0 };
-    order.push(s.nodeId);
-    if (!kids[s.nodeId]) kids[s.nodeId] = [];
-    if (s.parentId) {
-      if (!kids[s.parentId]) kids[s.parentId] = [];
-      if (!kids[s.parentId].includes(s.nodeId)) kids[s.parentId].push(s.nodeId);
+/* ─── Build tree layout from ONLY visited nodes ─── */
+function buildVisibleLayout(steps, upTo) {
+  const nodeMap = {};
+  const children = {};
+  const order = [];
+
+  // Only process steps up to current
+  for (let i = 0; i <= upTo && i < steps.length; i++) {
+    const s = steps[i];
+    if (!nodeMap[s.nodeId]) {
+      nodeMap[s.nodeId] = {
+        id: s.nodeId,
+        parentId: s.parentId || null,
+        label: s.label || s.nodeId,
+        depth: s.depth ?? 0,
+      };
+      order.push(s.nodeId);
+      if (!children[s.nodeId]) children[s.nodeId] = [];
+      if (s.parentId) {
+        if (!children[s.parentId]) children[s.parentId] = [];
+        if (!children[s.parentId].includes(s.nodeId)) {
+          children[s.parentId].push(s.nodeId);
+        }
+      }
     }
   }
+
+  // Position with compact layout
   const pos = {};
-  let leaf = 0;
+  let leafIdx = 0;
+
   function place(id) {
-    const ch = kids[id] || [];
-    if (!ch.length) { pos[id] = { x: leaf++ * HGAP + PAD, y: nodes[id].depth * VGAP + PAD }; return; }
-    ch.forEach(place);
-    const xs = ch.map(c => pos[c].x);
-    pos[id] = { x: (xs[0] + xs[xs.length - 1]) / 2, y: nodes[id].depth * VGAP + PAD };
+    const ch = children[id] || [];
+    const visibleChildren = ch.filter(c => nodeMap[c]);
+    if (!visibleChildren.length) {
+      pos[id] = { x: leafIdx * HGAP + PAD, y: (nodeMap[id]?.depth || 0) * VGAP + PAD };
+      leafIdx++;
+      return;
+    }
+    visibleChildren.forEach(place);
+    const xs = visibleChildren.map(c => pos[c]?.x || 0);
+    pos[id] = {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      y: (nodeMap[id]?.depth || 0) * VGAP + PAD,
+    };
   }
-  const root = order.find(id => !nodes[id].pid);
+
+  const root = order.find(id => !nodeMap[id].parentId);
   if (root) place(root);
-  const ax = Object.values(pos).map(p => p.x);
-  const ay = Object.values(pos).map(p => p.y);
-  return { nodes, kids, pos, w: Math.max(...ax, 400) + PAD + 60, h: Math.max(...ay, 300) + PAD + 60 };
+
+  // Handle any orphan nodes (parentId not yet visible)
+  order.forEach(id => {
+    if (!pos[id]) {
+      pos[id] = { x: leafIdx * HGAP + PAD, y: (nodeMap[id]?.depth || 0) * VGAP + PAD };
+      leafIdx++;
+    }
+  });
+
+  const allX = Object.values(pos).map(p => p.x);
+  const allY = Object.values(pos).map(p => p.y);
+
+  return {
+    nodeMap, children, pos, order,
+    w: (allX.length ? Math.max(...allX) : 200) + PAD + R,
+    h: (allY.length ? Math.max(...allY) : 200) + PAD + R,
+  };
 }
 
-/* ─── Per-step status map ─── */
-function statusMap(steps, idx) {
+/* ─── Get latest status for each node ─── */
+function getStatuses(steps, idx) {
   const m = {};
-  for (let i = 0; i <= idx && i < steps.length; i++) m[steps[i].nodeId] = steps[i].type;
-  if (idx < steps.length) m[steps[idx].nodeId] = 'current';
+  for (let i = 0; i <= idx && i < steps.length; i++) {
+    m[steps[i].nodeId] = steps[i].type;
+  }
+  // Mark current
+  if (idx >= 0 && idx < steps.length) {
+    m[steps[idx].nodeId] = 'current';
+  }
   return m;
 }
 
-/* ─── Which nodes are brand-new at this step ─── */
-function freshNodes(steps, idx) {
+/* ─── Detect new node at this step ─── */
+function getNewNode(steps, idx) {
+  if (idx < 0 || idx >= steps.length) return null;
   const seen = new Set();
-  for (let i = 0; i < idx && i < steps.length; i++) seen.add(steps[i].nodeId);
-  const out = new Set();
-  if (idx < steps.length && !seen.has(steps[idx].nodeId)) out.add(steps[idx].nodeId);
-  return out;
+  for (let i = 0; i < idx; i++) seen.add(steps[i].nodeId);
+  return seen.has(steps[idx].nodeId) ? null : steps[idx].nodeId;
 }
 
-/* ─── Component ─── */
+/* ═══════ COMPONENT ═══════ */
 export default function TreeView({ steps, currentStep }) {
   const boxRef = useRef(null);
   const [cam, setCam] = useState({ x: 0, y: 0, s: 1 });
-  const [drag, setDrag] = useState(false);
-  const anchor = useRef({ mx: 0, my: 0, cx: 0, cy: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({ mx: 0, my: 0, cx: 0, cy: 0 });
 
-  const layout  = useMemo(() => steps?.length ? buildLayout(steps) : null, [steps]);
-  const status  = useMemo(() => steps ? statusMap(steps, currentStep) : {}, [steps, currentStep]);
-  const newSet  = useMemo(() => steps ? freshNodes(steps, currentStep) : new Set(), [steps, currentStep]);
+  // Build layout from only visited nodes — tree GROWS as you step
+  const layout  = useMemo(() => steps?.length ? buildVisibleLayout(steps, currentStep) : null, [steps, currentStep]);
+  const statuses = useMemo(() => steps ? getStatuses(steps, currentStep) : {}, [steps, currentStep]);
+  const newNodeId = useMemo(() => steps ? getNewNode(steps, currentStep) : null, [steps, currentStep]);
 
-  /* ── auto-center on current node ── */
+  /* ── Center on current node ── */
   useEffect(() => {
     if (!layout || !steps?.[currentStep] || !boxRef.current) return;
     const p = layout.pos[steps[currentStep].nodeId];
     if (!p) return;
     const el = boxRef.current;
-    setCam(prev => ({
-      ...prev,
-      x: el.clientWidth  / 2 - p.x * prev.s,
-      y: el.clientHeight / 2 - p.y * prev.s,
-    }));
+    const targetX = el.clientWidth / 2 - p.x * cam.s;
+    const targetY = el.clientHeight / 2 - p.y * cam.s;
+    setCam(prev => ({ ...prev, x: targetX, y: targetY }));
   }, [currentStep, layout, steps]);
 
-  /* ── fit everything on first load ── */
+  /* ── Fit to screen ── */
   const fitScreen = useCallback(() => {
     if (!layout || !boxRef.current) return;
     const el = boxRef.current;
     const sx = (el.clientWidth  - 40) / layout.w;
     const sy = (el.clientHeight - 40) / layout.h;
-    const ns = Math.max(0.45, Math.min(sx, sy, 1.4));
-    setCam({ s: ns, x: (el.clientWidth - layout.w * ns) / 2, y: (el.clientHeight - layout.h * ns) / 2 });
+    const ns = Math.max(0.5, Math.min(sx, sy, 1.2));
+    setCam({
+      s: ns,
+      x: (el.clientWidth  - layout.w * ns) / 2,
+      y: (el.clientHeight - layout.h * ns) / 2,
+    });
   }, [layout]);
 
-  useEffect(() => { if (layout) fitScreen(); }, [layout]);
+  // Fit on first load or when layout changes significantly
+  useEffect(() => {
+    if (layout) fitScreen();
+  }, [steps]); // Only re-fit when new problem loaded, not every step
 
-  /* ── zoom (mouse-wheel) ── */
+  /* ── Mouse wheel zoom ── */
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
     const handler = (e) => {
       e.preventDefault();
-      const d = e.deltaY > 0 ? 0.9 : 1.1;
-      setCam(p => {
-        const ns = Math.max(0.15, Math.min(3.5, p.s * d));
-        const r = el.getBoundingClientRect();
-        const mx = e.clientX - r.left, my = e.clientY - r.top;
-        return { s: ns, x: mx - (mx - p.x) * (ns / p.s), y: my - (my - p.y) * (ns / p.s) };
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      setCam(prev => {
+        const ns = Math.max(0.2, Math.min(3, prev.s * factor));
+        const rect = el.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        return {
+          s: ns,
+          x: mx - (mx - prev.x) * (ns / prev.s),
+          y: my - (my - prev.y) * (ns / prev.s),
+        };
       });
     };
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
   }, []);
 
-  /* ── pan (mouse drag) ── */
-  const onDown = (e) => { if (e.button !== 0) return; setDrag(true); anchor.current = { mx: e.clientX, my: e.clientY, cx: cam.x, cy: cam.y }; };
-  const onMove = (e) => { if (!drag) return; setCam(p => ({ ...p, x: anchor.current.cx + (e.clientX - anchor.current.mx), y: anchor.current.cy + (e.clientY - anchor.current.my) })); };
-  const onUp   = () => setDrag(false);
+  /* ── Pan handlers ── */
+  const onDown = (e) => {
+    if (e.button !== 0) return;
+    setDragging(true);
+    dragStart.current = { mx: e.clientX, my: e.clientY, cx: cam.x, cy: cam.y };
+  };
+  const onMove = (e) => {
+    if (!dragging) return;
+    setCam(prev => ({
+      ...prev,
+      x: dragStart.current.cx + (e.clientX - dragStart.current.mx),
+      y: dragStart.current.cy + (e.clientY - dragStart.current.my),
+    }));
+  };
+  const onUp = () => setDragging(false);
 
-  /* ── empty state ── */
-  if (!layout) return (
+  /* ── Empty state ── */
+  if (!layout || !layout.order.length) return (
     <div className="tv-empty">
       <div className="tv-empty-icon">🌳</div>
       <p className="tv-empty-text">Recursion tree will appear here</p>
-      <p className="tv-empty-hint">Select a problem or paste your code to start</p>
+      <p className="tv-empty-hint">Select a problem or paste code to start</p>
     </div>
   );
 
-  const { nodes, kids, pos, w, h } = layout;
+  const { nodeMap, children, pos, order } = layout;
 
-  /* ── edges ── */
-  const edges = [];
-  Object.keys(nodes).forEach(id => {
-    const p = pos[id]; if (!p) return;
-    (kids[id] || []).forEach(cid => {
-      const cp = pos[cid]; if (!cp) return;
-      const vis = status[cid] && status[cid] !== 'pending';
-      if (!vis && status[cid] !== 'current') return; // Skip edges to unvisited nodes
-      const cur = status[cid] === 'current';
-      const isNew = newSet.has(cid);
-      const my = (p.y + NR + cp.y - NR) / 2;
-      edges.push(
+  /* ── Render edges ── */
+  const edgeElements = [];
+  order.forEach(id => {
+    const p = pos[id];
+    if (!p) return;
+    (children[id] || []).forEach(cid => {
+      if (!pos[cid]) return;
+      const cp = pos[cid];
+      const isCurrent = statuses[cid] === 'current';
+      const isNew = cid === newNodeId;
+      // Curved path
+      const midY = (p.y + R + cp.y - R) / 2;
+      edgeElements.push(
         <path
           key={`e-${id}-${cid}`}
-          d={`M${p.x},${p.y + NR} C${p.x},${my} ${cp.x},${my} ${cp.x},${cp.y - NR}`}
+          d={`M${p.x},${p.y + R} C${p.x},${midY} ${cp.x},${midY} ${cp.x},${cp.y - R}`}
           fill="none"
-          stroke={cur ? '#16a34a' : vis ? '#94a3b8' : '#d1d5db'}
-          strokeWidth={cur ? 3 : vis ? 2 : 1.2}
-          strokeDasharray={vis ? 'none' : '6 4'}
+          stroke={isCurrent ? '#16a34a' : '#64748b'}
+          strokeWidth={isCurrent ? 3.5 : 2.5}
+          opacity={isCurrent ? 1 : 0.6}
           className={isNew ? 'tv-edge-enter' : ''}
           pathLength="1"
         />
@@ -161,58 +226,71 @@ export default function TreeView({ steps, currentStep }) {
     });
   });
 
-  /* ── nodes ── */
-  const circles = [];
-  Object.keys(nodes).forEach(id => {
-    const p = pos[id]; if (!p) return;
-    const st = status[id] || 'pending';
-    const isPending = st === 'pending';
-    if (isPending) return; // Don't render unvisited nodes — cleaner view
-    const c  = PALETTE[st] || PALETTE.pending;
-    const cur = st === 'current';
-    const isNew = newSet.has(id);
-    const lbl = nodes[id].label;
-    const short = lbl.length > 13 ? lbl.slice(0, 12) + '…' : lbl;
-    const fs = short.length > 9 ? 10 : short.length > 6 ? 11.5 : 13;
+  /* ── Render nodes ── */
+  const nodeElements = [];
+  order.forEach(id => {
+    const p = pos[id];
+    if (!p) return;
+    const st = statuses[id] || 'call';
+    const col = C[st] || C.call;
+    const isCurrent = st === 'current';
+    const isNew = id === newNodeId;
+    const label = nodeMap[id].label;
+    const shortLabel = label.length > 12 ? label.slice(0, 11) + '…' : label;
+    const fontSize = shortLabel.length > 9 ? 11 : shortLabel.length > 6 ? 12.5 : 14;
 
-    circles.push(
+    nodeElements.push(
       <g key={id} transform={`translate(${p.x},${p.y})`}
-         className={`tv-node ${isNew ? 'tv-node-enter' : ''} ${cur ? 'tv-node-cur' : ''}`}>
+         className={`tv-node ${isNew ? 'tv-node-enter' : ''} ${isCurrent ? 'tv-node-cur' : ''}`}>
 
-        {/* animated glow rings */}
-        {cur && <>
-          <circle r={NR + 18} fill="none" stroke={`rgba(${c.g},0.12)`} strokeWidth={2} className="tv-pulse" />
-          <circle r={NR + 10} fill="none" stroke={`rgba(${c.g},0.25)`} strokeWidth={2} />
+        {/* Glow rings for current node */}
+        {isCurrent && <>
+          <circle r={R + 20} fill="none" stroke={`rgba(${col.glow},0.1)`} strokeWidth={2} className="tv-pulse" />
+          <circle r={R + 10} fill="none" stroke={`rgba(${col.glow},0.25)`} strokeWidth={2} />
         </>}
 
-        {/* soft shadow */}
-        <circle r={NR} fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth={4} />
+        {/* Main circle */}
+        <circle
+          r={R}
+          fill={col.fill}
+          stroke={col.stroke}
+          strokeWidth={isCurrent ? 3.5 : 2.5}
+          style={{
+            filter: isCurrent ? `drop-shadow(0 0 12px rgba(${col.glow},0.5))` : `drop-shadow(0 2px 4px rgba(0,0,0,0.1))`,
+            transition: 'fill .35s, stroke .35s, filter .35s',
+          }}
+        />
 
-        {/* main circle */}
-        <circle r={NR} fill={c.fill} stroke={c.stroke}
-          strokeWidth={cur ? 3 : 2}
-          style={{ filter: cur ? `drop-shadow(0 0 10px rgba(${c.g},0.45))` : 'none',
-                   transition: 'fill .4s, stroke .4s, filter .4s, stroke-width .3s' }} />
-
-        {/* label */}
-        <text textAnchor="middle" dominantBaseline="central" fill={c.text}
-          fontSize={fs} fontFamily="'JetBrains Mono',monospace" fontWeight="700"
-          style={{ transition: 'fill .4s', pointerEvents: 'none' }}>
-          {short}
+        {/* Label text */}
+        <text
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill={col.text}
+          fontSize={fontSize}
+          fontFamily="'JetBrains Mono', monospace"
+          fontWeight="700"
+          style={{ pointerEvents: 'none' }}
+        >
+          {shortLabel}
         </text>
 
-        {/* "NOW" badge */}
-        {cur && <g>
-          <rect x={-22} y={NR + 6} width={44} height={18} rx={9} fill="#16a34a" />
-          <text textAnchor="middle" y={NR + 18} fill="#fff" fontSize={9}
-            fontFamily="monospace" fontWeight="800">▶ NOW</text>
-        </g>}
+        {/* "NOW" badge on current node */}
+        {isCurrent && (
+          <g>
+            <rect x={-26} y={R + 8} width={52} height={20} rx={10} fill="#16a34a" />
+            <text textAnchor="middle" y={R + 21} fill="#fff" fontSize={10}
+              fontFamily="'JetBrains Mono', monospace" fontWeight="800">▶ NOW</text>
+          </g>
+        )}
 
-        {/* step type micro-label for non-current visited nodes */}
-        {!cur && st !== 'pending' && <text textAnchor="middle" y={NR + 16} fill={c.stroke}
-          fontSize={8} fontFamily="monospace" fontWeight="600" opacity={0.7}>
-          {st === 'base_case' ? '✓ base' : st === 'return' ? '↑ ret' : st === 'backtrack' ? '↩ back' : st === 'prune' ? '✂ cut' : ''}
-        </text>}
+        {/* Status micro-label for visited non-current nodes */}
+        {!isCurrent && (
+          <text textAnchor="middle" y={R + 18} fill={col.stroke}
+            fontSize={9} fontFamily="monospace" fontWeight="600" opacity={0.8}>
+            {st === 'base_case' ? '✓ base' : st === 'return' ? '↑ return' :
+             st === 'backtrack' ? '↩ back' : st === 'prune' ? '✂ prune' : ''}
+          </text>
+        )}
       </g>
     );
   });
@@ -220,19 +298,19 @@ export default function TreeView({ steps, currentStep }) {
   return (
     <div className="tv-canvas" ref={boxRef}
       onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-      style={{ cursor: drag ? 'grabbing' : 'grab' }}>
+      style={{ cursor: dragging ? 'grabbing' : 'grab' }}>
 
-      {/* zoom / fit controls */}
+      {/* Controls */}
       <div className="tv-controls">
-        <button onClick={() => setCam(p => ({ ...p, s: Math.min(3.5, p.s * 1.25) }))} title="Zoom in">+</button>
-        <button onClick={() => setCam(p => ({ ...p, s: Math.max(0.15, p.s * 0.8) }))} title="Zoom out">−</button>
+        <button onClick={() => setCam(p => ({ ...p, s: Math.min(3, p.s * 1.3) }))} title="Zoom in">+</button>
+        <button onClick={() => setCam(p => ({ ...p, s: Math.max(0.2, p.s * 0.75) }))} title="Zoom out">−</button>
         <button onClick={fitScreen} title="Fit to screen">⊞</button>
       </div>
 
       <svg width="100%" height="100%" style={{ display: 'block' }}>
         <g transform={`translate(${cam.x},${cam.y}) scale(${cam.s})`}>
-          {edges}
-          {circles}
+          {edgeElements}
+          {nodeElements}
         </g>
       </svg>
 

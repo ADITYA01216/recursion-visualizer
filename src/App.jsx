@@ -20,6 +20,35 @@ const LEGEND = [
   { type:'memo',      label:'Memo Hit',  color:'#94a3b8' },
 ];
 
+function highlightCodeLine(line) {
+  if (!line.trim()) return <span>&nbsp;</span>;
+  if (line.trim().startsWith('//')) {
+    return <span style={{ color: '#64748b', fontStyle: 'italic' }}>{line}</span>;
+  }
+
+  const parts = line.split(/(\/\/.*|\b(?:if|else|return|while|for|switch|case|break|continue|const|struct|class)\b|\b\d+\b|"[^"]*"|'[^']*')/g);
+
+  return parts.map((part, index) => {
+    if (!part) return null;
+    if (part.startsWith('//')) {
+      return <span key={index} style={{ color: '#64748b', fontStyle: 'italic' }}>{part}</span>;
+    }
+    if (['if', 'else', 'return', 'while', 'for', 'switch', 'case', 'break', 'continue', 'const', 'struct', 'class'].includes(part)) {
+      return <span key={index} style={{ color: '#f43f5e', fontWeight: '700' }}>{part}</span>;
+    }
+    if (['void', 'int', 'float', 'double', 'char', 'bool', 'vector', 'string', 'auto'].includes(part)) {
+      return <span key={index} style={{ color: '#06b6d4', fontWeight: '700' }}>{part}</span>;
+    }
+    if (/^\d+$/.test(part)) {
+      return <span key={index} style={{ color: '#eab308' }}>{part}</span>;
+    }
+    if ((part.startsWith('"') && part.endsWith('"')) || (part.startsWith("'") && part.endsWith("'"))) {
+      return <span key={index} style={{ color: '#10b981' }}>{part}</span>;
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
 export default function App() {
   const [view, setView]         = useState('input');
   const [vizData, setVizData]   = useState(null);
@@ -247,7 +276,7 @@ export default function App() {
                     className={`code-line ${isHighlighted ? 'code-line-active' : ''}`}
                   >
                     <span className="code-line-num">{lineNum}</span>
-                    <span className="code-line-text">{line || ' '}</span>
+                    <span className="code-line-text">{highlightCodeLine(line)}</span>
                     {isHighlighted && (
                       <span className="code-line-arrow">◀ executing</span>
                     )}
