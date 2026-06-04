@@ -1,5 +1,41 @@
 import { useState } from 'react';
 
+function computeDiff(oldStr, newStr) {
+  const oldLines = (oldStr || '').split('\n');
+  const newLines = (newStr || '').split('\n');
+  const M = oldLines.length;
+  const N = newLines.length;
+
+  const dp = Array.from({ length: M + 1 }, () => Array(N + 1).fill(0));
+  for (let i = 1; i <= M; i++) {
+    for (let j = 1; j <= N; j++) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+
+  const diff = [];
+  let i = M, j = N;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+      diff.push({ type: 'normal', val: oldLines[i - 1] });
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      diff.push({ type: 'added', val: newLines[j - 1] });
+      j--;
+    } else {
+      diff.push({ type: 'removed', val: oldLines[i - 1] });
+      i--;
+    }
+  }
+  return diff.reverse();
+}
+
+
 const SEV_COLORS = {
   critical:   { bg:'#fee2e2', border:'#fca5a5', text:'#991b1b', icon:'🔴' },
   warning:    { bg:'#fef9c3', border:'#fde047', text:'#854d0e', icon:'🟡' },
@@ -198,12 +234,31 @@ export default function DebugPanel({ onClose }) {
             )}
 
             {/* Corrected code tab */}
-            {activeTab === 'corrected' && result.correctedCode && (
-              <div>
-                <p style={{fontSize:12,color:'#64748b',marginBottom:8}}>✅ Here is the corrected version of your code:</p>
-                <pre className="debug-corrected">{result.correctedCode}</pre>
-              </div>
-            )}
+            {activeTab === 'corrected' && result.correctedCode && (() => {
+              const diff = computeDiff(code, result.correctedCode);
+              return (
+                <div>
+                  <p style={{fontSize:12,color:'#64748b',marginBottom:12}}>
+                    💡 Comparing your input code (<span style={{color:'#f87171',fontWeight:600}}>- removed</span>) with the AI-corrected version (<span style={{color:'#4ade80',fontWeight:600}}>+ added</span>):
+                  </p>
+                  <div className="debug-diff-container">
+                    {diff.map((item, index) => {
+                      const isAdded = item.type === 'added';
+                      const isRemoved = item.type === 'removed';
+                      const className = `diff-line ${isAdded ? 'diff-line-added' : isRemoved ? 'diff-line-removed' : 'diff-line-normal'}`;
+                      return (
+                        <div key={index} className={className}>
+                          <span className="diff-sign">
+                            {isAdded ? '+' : isRemoved ? '-' : ' '}
+                          </span>
+                          <span className="diff-text">{item.val || ' '}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
