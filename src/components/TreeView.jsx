@@ -282,11 +282,17 @@ export default function TreeView({ steps, currentStep }) {
          onMouseLeave={() => setHoveredNode(null)}
          style={{ cursor: 'pointer' }}>
 
-        {/* Glow rings for current node */}
-        {isCurrent && <>
-          <circle r={R + 20} fill="none" stroke={`rgba(${col.glow},0.1)`} strokeWidth={2} className="tv-pulse" />
-          <circle r={R + 10} fill="none" stroke={`rgba(${col.glow},0.25)`} strokeWidth={2} />
-        </>}
+         {/* Glow rings for current/hovered node */}
+         {isCurrent ? (
+           <>
+             <circle r={R + 20} fill="none" stroke={`rgba(${col.glow},0.1)`} strokeWidth={2} className="tv-pulse" />
+             <circle r={R + 10} fill="none" stroke={`rgba(${col.glow},0.25)`} strokeWidth={2} />
+           </>
+         ) : (
+           hoveredNode === id && (
+             <circle r={R + 8} fill="none" stroke={`rgba(${col.glow},0.35)`} strokeWidth={2.5} />
+           )
+         )}
 
         {/* Main circle */}
         <circle
@@ -295,8 +301,7 @@ export default function TreeView({ steps, currentStep }) {
           stroke={col.stroke}
           strokeWidth={isCurrent || hoveredNode === id ? 3.5 : 2.5}
           style={{
-            filter: isCurrent || hoveredNode === id ? `drop-shadow(0 0 12px rgba(${col.glow},0.55))` : `drop-shadow(0 2px 4px rgba(0,0,0,0.1))`,
-            transition: 'fill .35s, stroke .35s, filter .35s',
+            transition: 'fill .35s, stroke .35s',
           }}
         />
 
