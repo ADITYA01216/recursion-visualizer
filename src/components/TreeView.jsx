@@ -112,12 +112,22 @@ export default function TreeView({ steps, currentStep }) {
   const boxRef = useRef(null);
   const [cam, setCam] = useState({ x: 0, y: 0, s: 1 });
   const [dragging, setDragging] = useState(false);
+  const [hoveredNode, setHoveredNode] = useState(null);
   const dragStart = useRef({ mx: 0, my: 0, cx: 0, cy: 0 });
 
   // Build layout from only visited nodes — tree GROWS as you step
   const layout  = useMemo(() => steps?.length ? buildVisibleLayout(steps, currentStep) : null, [steps, currentStep]);
   const statuses = useMemo(() => steps ? getStatuses(steps, currentStep) : {}, [steps, currentStep]);
   const newNodeId = useMemo(() => steps ? getNewNode(steps, currentStep) : null, [steps, currentStep]);
+
+  // Find latest step info for hovered node
+  const hoveredStep = useMemo(() => {
+    if (!hoveredNode || !steps) return null;
+    for (let i = currentStep; i >= 0; i--) {
+      if (steps[i].nodeId === hoveredNode) return steps[i];
+    }
+    return null;
+  }, [hoveredNode, steps, currentStep]);
 
   /* ── Center on current node ── */
   useEffect(() => {
@@ -243,7 +253,10 @@ export default function TreeView({ steps, currentStep }) {
 
     nodeElements.push(
       <g key={id} transform={`translate(${p.x},${p.y})`}
-         className={`tv-node ${isNew ? 'tv-node-enter' : ''} ${isCurrent ? 'tv-node-cur' : ''}`}>
+         className={`tv-node ${isNew ? 'tv-node-enter' : ''} ${isCurrent ? 'tv-node-cur' : ''}`}
+         onMouseEnter={() => setHoveredNode(id)}
+         onMouseLeave={() => setHoveredNode(null)}
+         style={{ cursor: 'pointer' }}>
 
         {/* Glow rings for current node */}
         {isCurrent && <>
@@ -256,9 +269,9 @@ export default function TreeView({ steps, currentStep }) {
           r={R}
           fill={col.fill}
           stroke={col.stroke}
-          strokeWidth={isCurrent ? 3.5 : 2.5}
+          strokeWidth={isCurrent || hoveredNode === id ? 3.5 : 2.5}
           style={{
-            filter: isCurrent ? `drop-shadow(0 0 12px rgba(${col.glow},0.5))` : `drop-shadow(0 2px 4px rgba(0,0,0,0.1))`,
+            filter: isCurrent || hoveredNode === id ? `drop-shadow(0 0 12px rgba(${col.glow},0.55))` : `drop-shadow(0 2px 4px rgba(0,0,0,0.1))`,
             transition: 'fill .35s, stroke .35s, filter .35s',
           }}
         />
@@ -297,6 +310,74 @@ export default function TreeView({ steps, currentStep }) {
     );
   });
 
+  const tooltipElement = (() => {
+    if (!hoveredNode || !hoveredStep || !pos[hoveredNode]) return null;
+    const p = pos[hoveredNode];
+    const tx = p.x * cam.s + cam.x;
+    const ty = p.y * cam.s + cam.y;
+
+    const args = hoveredStep.variables || hoveredStep.args || {};
+    const localVars = hoveredStep.localVars || {};
+    const returnVal = hoveredStep.returnValue ?? hoveredStep.ret;
+    const desc = hoveredStep.desc || '';
+    const st = statuses[hoveredNode] || 'call';
+    const col = C[st] || C.call;
+
+    const argList = Object.entries(args);
+    const varList = Object.entries(localVars);
+
+    return (
+      <div
+        className="tv-tooltip"
+        style={{
+          left: `${tx}px`,
+          top: `${ty - R * cam.s - 12}px`,
+          borderLeft: `4px solid ${col.stroke}`,
+        }}
+      >
+        <div className="tv-tooltip-header">
+          <span className="tv-tooltip-title">{hoveredStep.label || hoveredNode}</span>
+          <span className="tv-tooltip-badge" style={{ background: col.fill, color: col.text }}>
+            {st.replace('_', ' ')}
+          </span>
+        </div>
+        <div className="tv-tooltip-body">
+          {argList.length > 0 && (
+            <div className="tv-tooltip-section">
+              <span className="tv-tooltip-section-title">Arguments:</span>
+              <div className="tv-tooltip-vars">
+                {argList.map(([k, v]) => (
+                  <div key={k} className="tv-tooltip-var">
+                    <span className="tv-var-name">{k}</span> = <span className="tv-var-val">{JSON.stringify(v)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {varList.length > 0 && (
+            <div className="tv-tooltip-section">
+              <span className="tv-tooltip-section-title">Locals:</span>
+              <div className="tv-tooltip-vars">
+                {varList.map(([k, v]) => (
+                  <div key={k} className="tv-tooltip-var">
+                    <span className="tv-var-name">{k}</span> = <span className="tv-var-val">{JSON.stringify(v)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {returnVal !== undefined && (
+            <div className="tv-tooltip-section tv-tooltip-ret">
+              <span className="tv-tooltip-section-title">Returns:</span>
+              <span className="tv-ret-val">{JSON.stringify(returnVal)}</span>
+            </div>
+          )}
+          {desc && <p className="tv-tooltip-desc">{desc}</p>}
+        </div>
+      </div>
+    );
+  })();
+
   return (
     <div className="tv-canvas" ref={boxRef}
       onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
@@ -317,6 +398,7 @@ export default function TreeView({ steps, currentStep }) {
       </svg>
 
       <div className="tv-zoom-badge">{Math.round(cam.s * 100)}%</div>
+      {tooltipElement}
     </div>
   );
 }

@@ -569,3 +569,99 @@ textarea, input { font-family: inherit; outline: none; transition: border 0.2s; 
 }
 .gv-pill-back { background: #fee2e2; color: #991b1b; }
 .gv-pill-ok   { background: #dcfce7; color: #15803d; }
+
+/* ===== TOOLTIP OVERLAY ===== */
+.tv-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: #cbd5e1;
+  font-family: sans-serif;
+  font-size: 11px;
+  min-width: 160px;
+  max-width: 250px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 100;
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+}
+.tv-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+.tv-tooltip-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: white;
+  font-size: 11px;
+}
+.tv-tooltip-badge {
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 8px;
+  letter-spacing: 0.5px;
+}
+.tv-tooltip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tv-tooltip-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tv-tooltip-section-title {
+  font-size: 8px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.tv-tooltip-vars {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.tv-tooltip-var {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #94a3b8;
+}
+.tv-var-name {
+  color: #38bdf8;
+}
+.tv-var-val {
+  color: #e2e8f0;
+}
+.tv-tooltip-ret {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.tv-ret-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: #4ade80;
+}
+.tv-tooltip-desc {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #94a3b8;
+  border-top: 1px solid #334155;
+  padding-top: 6px;
+}
