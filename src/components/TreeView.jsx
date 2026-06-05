@@ -18,47 +18,56 @@ const C = {
   current:   { fill:'#bbf7d0', stroke:'#16a34a', text:'#052e16', glow:'22,163,74'   },
 };
 
-/* ─── Build tree layout from ONLY visited nodes ─── */
-function buildVisibleLayout(steps, upTo) {
+/* ─── Helper to unify call and return steps of the same recursion node ─── */
+function getBaseId(id) {
+  if (!id) return null;
+  return id.endsWith('r') ? id.slice(0, -1) : id;
+}
+
+/* ─── Build stable tree layout from ALL steps ─── */
+function buildFullLayout(steps) {
+  if (!steps || !steps.length) return null;
   const nodeMap = {};
   const children = {};
   const order = [];
 
-  // Only process steps up to current
-  for (let i = 0; i <= upTo && i < steps.length; i++) {
+  // Process ALL steps to build the complete stable tree coordinates
+  for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
-    if (!nodeMap[s.nodeId]) {
-      nodeMap[s.nodeId] = {
-        id: s.nodeId,
-        parentId: s.parentId || null,
-        label: s.label || s.nodeId,
+    const nodeId = getBaseId(s.nodeId);
+    const parentId = getBaseId(s.parentId);
+
+    if (!nodeMap[nodeId]) {
+      nodeMap[nodeId] = {
+        id: nodeId,
+        parentId: parentId || null,
+        label: s.label || nodeId,
         depth: s.depth ?? 0,
       };
-      order.push(s.nodeId);
-      if (!children[s.nodeId]) children[s.nodeId] = [];
-      if (s.parentId) {
-        if (!children[s.parentId]) children[s.parentId] = [];
-        if (!children[s.parentId].includes(s.nodeId)) {
-          children[s.parentId].push(s.nodeId);
+      order.push(nodeId);
+      if (!children[nodeId]) children[nodeId] = [];
+      if (parentId) {
+        if (!children[parentId]) children[parentId] = [];
+        if (!children[parentId].includes(nodeId)) {
+          children[parentId].push(nodeId);
         }
       }
     }
   }
 
-  // Position with compact layout
+  // Position with compact layout (classical tree positioning)
   const pos = {};
   let leafIdx = 0;
 
   function place(id) {
     const ch = children[id] || [];
-    const visibleChildren = ch.filter(c => nodeMap[c]);
-    if (!visibleChildren.length) {
+    if (!ch.length) {
       pos[id] = { x: leafIdx * HGAP + PAD, y: (nodeMap[id]?.depth || 0) * VGAP + PAD };
       leafIdx++;
       return;
     }
-    visibleChildren.forEach(place);
-    const xs = visibleChildren.map(c => pos[c]?.x || 0);
+    ch.forEach(place);
+    const xs = ch.map(c => pos[c]?.x || 0);
     pos[id] = {
       x: (Math.min(...xs) + Math.max(...xs)) / 2,
       y: (nodeMap[id]?.depth || 0) * VGAP + PAD,
@@ -68,7 +77,7 @@ function buildVisibleLayout(steps, upTo) {
   const root = order.find(id => !nodeMap[id].parentId);
   if (root) place(root);
 
-  // Handle any orphan nodes (parentId not yet visible)
+  // Handle any orphan nodes
   order.forEach(id => {
     if (!pos[id]) {
       pos[id] = { x: leafIdx * HGAP + PAD, y: (nodeMap[id]?.depth || 0) * VGAP + PAD };
@@ -90,11 +99,13 @@ function buildVisibleLayout(steps, upTo) {
 function getStatuses(steps, idx) {
   const m = {};
   for (let i = 0; i <= idx && i < steps.length; i++) {
-    m[steps[i].nodeId] = steps[i].type;
+    const baseId = getBaseId(steps[i].nodeId);
+    m[baseId] = steps[i].type;
   }
   // Mark current
   if (idx >= 0 && idx < steps.length) {
-    m[steps[idx].nodeId] = 'current';
+    const activeId = getBaseId(steps[idx].nodeId);
+    m[activeId] = 'current';
   }
   return m;
 }
@@ -103,8 +114,9 @@ function getStatuses(steps, idx) {
 function getNewNode(steps, idx) {
   if (idx < 0 || idx >= steps.length) return null;
   const seen = new Set();
-  for (let i = 0; i < idx; i++) seen.add(steps[i].nodeId);
-  return seen.has(steps[idx].nodeId) ? null : steps[idx].nodeId;
+  for (let i = 0; i < idx; i++) seen.add(getBaseId(steps[i].nodeId));
+  const activeId = getBaseId(steps[idx].nodeId);
+  return seen.has(activeId) ? null : activeId;
 }
 
 /* ═══════ COMPONENT ═══════ */
@@ -115,30 +127,29 @@ export default function TreeView({ steps, currentStep }) {
   const [hoveredNode, setHoveredNode] = useState(null);
   const dragStart = useRef({ mx: 0, my: 0, cx: 0, cy: 0 });
 
-  // Build layout from only visited nodes — tree GROWS as you step
-  const layout  = useMemo(() => steps?.length ? buildVisibleLayout(steps, currentStep) : null, [steps, currentStep]);
+  // Build full stable layout once for the entire trace
+  const layout = useMemo(() => steps?.length ? buildFullLayout(steps) : null, [steps]);
   const statuses = useMemo(() => steps ? getStatuses(steps, currentStep) : {}, [steps, currentStep]);
   const newNodeId = useMemo(() => steps ? getNewNode(steps, currentStep) : null, [steps, currentStep]);
+
+  // Compute set of nodes visited up to currentStep
+  const visitedNodes = useMemo(() => {
+    const set = new Set();
+    if (!steps) return set;
+    for (let i = 0; i <= currentStep && i < steps.length; i++) {
+      set.add(getBaseId(steps[i].nodeId));
+    }
+    return set;
+  }, [steps, currentStep]);
 
   // Find latest step info for hovered node
   const hoveredStep = useMemo(() => {
     if (!hoveredNode || !steps) return null;
     for (let i = currentStep; i >= 0; i--) {
-      if (steps[i].nodeId === hoveredNode) return steps[i];
+      if (getBaseId(steps[i].nodeId) === hoveredNode) return steps[i];
     }
     return null;
   }, [hoveredNode, steps, currentStep]);
-
-  /* ── Center on current node ── */
-  useEffect(() => {
-    if (!layout || !steps?.[currentStep] || !boxRef.current) return;
-    const p = layout.pos[steps[currentStep].nodeId];
-    if (!p) return;
-    const el = boxRef.current;
-    const targetX = el.clientWidth / 2 - p.x * cam.s;
-    const targetY = el.clientHeight / 2 - p.y * cam.s;
-    setCam(prev => ({ ...prev, x: targetX, y: targetY }));
-  }, [currentStep, layout, steps]);
 
   /* ── Fit to screen ── */
   const fitScreen = useCallback(() => {
@@ -157,7 +168,7 @@ export default function TreeView({ steps, currentStep }) {
   // Fit on first load or when layout changes significantly
   useEffect(() => {
     if (layout) fitScreen();
-  }, [steps]); // Only re-fit when new problem loaded, not every step
+  }, [steps, layout]); // Only re-fit when new problem loaded or layout computed, not every step
 
   /* ── Mouse wheel zoom ── */
   useEffect(() => {
@@ -212,10 +223,11 @@ export default function TreeView({ steps, currentStep }) {
   /* ── Render edges ── */
   const edgeElements = [];
   order.forEach(id => {
+    if (!visitedNodes.has(id)) return;
     const p = pos[id];
     if (!p) return;
     (children[id] || []).forEach(cid => {
-      if (!pos[cid]) return;
+      if (!visitedNodes.has(cid) || !pos[cid]) return;
       const cp = pos[cid];
       const childStatus = statuses[cid] || 'call';
       const isCurrent = childStatus === 'current';
@@ -241,13 +253,25 @@ export default function TreeView({ steps, currentStep }) {
   /* ── Render nodes ── */
   const nodeElements = [];
   order.forEach(id => {
+    if (!visitedNodes.has(id)) return;
     const p = pos[id];
     if (!p) return;
     const st = statuses[id] || 'call';
     const col = C[st] || C.call;
     const isCurrent = st === 'current';
     const isNew = id === newNodeId;
-    const label = nodeMap[id].label;
+
+    // Retrieve label and dynamically add return value if available in steps up to current step
+    let label = nodeMap[id].label;
+    for (let i = currentStep; i >= 0; i--) {
+      if (getBaseId(steps[i].nodeId) === id) {
+        if ((steps[i].type === 'return' || steps[i].type === 'base_case') && steps[i].returnValue !== null && steps[i].returnValue !== undefined) {
+          label = `${nodeMap[id].label} = ${JSON.stringify(steps[i].returnValue)}`;
+        }
+        break;
+      }
+    }
+
     const shortLabel = label.length > 12 ? label.slice(0, 11) + '…' : label;
     const fontSize = shortLabel.length > 9 ? 11 : shortLabel.length > 6 ? 12.5 : 14;
 
