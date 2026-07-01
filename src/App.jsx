@@ -49,6 +49,14 @@ function highlightCodeLine(line) {
   });
 }
 
+const MSGS = [
+  'Reading your code...',
+  'Understanding the algorithm...',
+  'Tracing recursive calls...',
+  'Building visualization...',
+  'Almost ready...',
+];
+
 export default function App() {
   const [view, setView]         = useState('input');
   const [vizData, setVizData]   = useState(null);
@@ -56,7 +64,7 @@ export default function App() {
   const [playing, setPlaying]   = useState(false);
   const [speed, setSpeed]       = useState(900);
   const [error, setError]       = useState('');
-  const [loadMsg, setLoadMsg]   = useState('');
+  const [loadMsg, setLoadMsg]   = useState(MSGS[0]);
   const [inputCode, setInputCode] = useState('');
   const [vizMode, setVizMode]   = useState('tree');
   const [showDebug, setShowDebug] = useState(false);
@@ -64,18 +72,9 @@ export default function App() {
   const timerRef = useRef(null);
   const msgRef   = useRef(0);
 
-  const MSGS = [
-    'Reading your code...',
-    'Understanding the algorithm...',
-    'Tracing recursive calls...',
-    'Building visualization...',
-    'Almost ready...',
-  ];
-
   // Rotate loading messages
   useEffect(() => {
     if (view !== 'loading') return;
-    setLoadMsg(MSGS[0]);
     msgRef.current = 0;
     const iv = setInterval(() => {
       msgRef.current = (msgRef.current + 1) % MSGS.length;
@@ -117,21 +116,9 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [view, vizData]);
 
-  // ✅ Detect recursion type
-  function detectVizMode(steps) {
-    const childCount = {};
-
-    steps.forEach(s => {
-      if (!s.parentId) return;
-      childCount[s.parentId] = (childCount[s.parentId] || 0) + 1;
-    });
-
-    const maxChildren = Math.max(0, ...Object.values(childCount));
-    return maxChildren <= 1 ? 'stack' : 'tree';
-  }
-
   async function handleVisualize({ problem, code, boardN, isBuiltIn }) {
     setView('loading');
+    setLoadMsg(MSGS[0]);
     setError('');
     setInputCode(code || '');
     try {
@@ -174,7 +161,6 @@ export default function App() {
   const cur     = steps[step];
   const problemTypeStr = (vizData?.problemType || '').toLowerCase();
   const isGrid  = ['nqueens','maze','grid'].includes(problemTypeStr) || steps.some(s => s.boardState);
-  const isArray = problemTypeStr === 'twopointer' || problemTypeStr === 'slidingwindow';
   const codeLines = (inputCode || vizData?.generatedCode || '').split('\n');
   const hasCode   = codeLines.length > 1;
 
@@ -300,7 +286,6 @@ export default function App() {
         <aside className="info-panel">
           <StepPanel
             step={cur}
-            totalSteps={steps.length}
             generatedCode={vizData?.generatedCode}
           />
           <ComplexityChart tc={vizData?.timeComplexity} />

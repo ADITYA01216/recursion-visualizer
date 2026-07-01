@@ -44,7 +44,7 @@ function getMistakeHint(step) {
   return hints.length > 0 ? hints : null;
 }
 
-export default function StepPanel({ step, totalSteps, generatedCode }) {
+export default function StepPanel({ step, generatedCode }) {
   if (!step) return (
     <div className="step-panel-empty">
       <p>Press <strong>Play</strong> or use <kbd>→</kbd> <kbd>←</kbd> arrow keys to step through.</p>

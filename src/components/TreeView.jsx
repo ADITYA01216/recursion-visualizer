@@ -110,14 +110,7 @@ function getStatuses(steps, idx) {
   return m;
 }
 
-/* ─── Detect new node at this step ─── */
-function getNewNode(steps, idx) {
-  if (idx < 0 || idx >= steps.length) return null;
-  const seen = new Set();
-  for (let i = 0; i < idx; i++) seen.add(getBaseId(steps[i].nodeId));
-  const activeId = getBaseId(steps[idx].nodeId);
-  return seen.has(activeId) ? null : activeId;
-}
+
 
 /* ═══════ COMPONENT ═══════ */
 export default function TreeView({ steps, currentStep }) {
@@ -130,7 +123,7 @@ export default function TreeView({ steps, currentStep }) {
   // Build full stable layout once for the entire trace
   const layout = useMemo(() => steps?.length ? buildFullLayout(steps) : null, [steps]);
   const statuses = useMemo(() => steps ? getStatuses(steps, currentStep) : {}, [steps, currentStep]);
-  const newNodeId = useMemo(() => steps ? getNewNode(steps, currentStep) : null, [steps, currentStep]);
+
 
   // Compute set of nodes visited up to currentStep
   const visitedNodes = useMemo(() => {
@@ -165,10 +158,9 @@ export default function TreeView({ steps, currentStep }) {
     });
   }, [layout]);
 
-  // Fit on first load or when layout changes significantly
   useEffect(() => {
     if (layout) fitScreen();
-  }, [steps, layout]); // Only re-fit when new problem loaded or layout computed, not every step
+  }, [steps, layout, fitScreen]); // Only re-fit when new problem loaded or layout computed, not every step
 
   /* ── Mouse wheel zoom ── */
   useEffect(() => {
@@ -231,7 +223,7 @@ export default function TreeView({ steps, currentStep }) {
       const cp = pos[cid];
       const childStatus = statuses[cid] || 'call';
       const isCurrent = childStatus === 'current';
-      const isNew = cid === newNodeId;
+
       const edgeColor = C[childStatus]?.stroke || '#64748b';
       // Curved path
       const midY = (p.y + R + cp.y - R) / 2;
@@ -243,7 +235,6 @@ export default function TreeView({ steps, currentStep }) {
           stroke={edgeColor}
           strokeWidth={isCurrent ? 4.5 : 3.5}
           opacity={isCurrent ? 1 : 0.75}
-          className={isNew ? 'tv-edge-enter' : ''}
           pathLength="1"
         />
       );
@@ -259,7 +250,7 @@ export default function TreeView({ steps, currentStep }) {
     const st = statuses[id] || 'call';
     const col = C[st] || C.call;
     const isCurrent = st === 'current';
-    const isNew = id === newNodeId;
+
 
     // Retrieve label and dynamically add return value if available in steps up to current step
     let label = nodeMap[id].label;
@@ -277,64 +268,66 @@ export default function TreeView({ steps, currentStep }) {
 
     nodeElements.push(
       <g key={id} transform={`translate(${p.x},${p.y})`}
-         className={`tv-node ${isNew ? 'tv-node-enter' : ''} ${isCurrent ? 'tv-node-cur' : ''}`}
+         className={`tv-node ${isCurrent ? 'tv-node-cur' : ''}`}
          onMouseEnter={() => setHoveredNode(id)}
          onMouseLeave={() => setHoveredNode(null)}
          style={{ cursor: 'pointer' }}>
 
-         {/* Glow rings for current/hovered node */}
-         {isCurrent ? (
-           <>
-             <circle r={R + 20} fill="none" stroke={`rgba(${col.glow},0.1)`} strokeWidth={2} className="tv-pulse" />
-             <circle r={R + 10} fill="none" stroke={`rgba(${col.glow},0.25)`} strokeWidth={2} />
-           </>
-         ) : (
-           hoveredNode === id && (
-             <circle r={R + 8} fill="none" stroke={`rgba(${col.glow},0.35)`} strokeWidth={2.5} />
-           )
-         )}
+        <g style={{ transformOrigin: '0px 0px' }}>
+          {/* Glow rings for current/hovered node */}
+          {isCurrent ? (
+            <>
+              <circle r={R + 20} fill="none" stroke={`rgba(${col.glow},0.1)`} strokeWidth={2} className="tv-pulse" />
+              <circle r={R + 10} fill="none" stroke={`rgba(${col.glow},0.25)`} strokeWidth={2} />
+            </>
+          ) : (
+            hoveredNode === id && (
+              <circle r={R + 8} fill="none" stroke={`rgba(${col.glow},0.35)`} strokeWidth={2.5} />
+            )
+          )}
 
-        {/* Main circle */}
-        <circle
-          r={R}
-          fill={col.fill}
-          stroke={col.stroke}
-          strokeWidth={isCurrent || hoveredNode === id ? 3.5 : 2.5}
-          style={{
-            transition: 'fill .35s, stroke .35s',
-          }}
-        />
+          {/* Main circle */}
+          <circle
+            r={R}
+            fill={col.fill}
+            stroke={col.stroke}
+            strokeWidth={isCurrent || hoveredNode === id ? 3.5 : 2.5}
+            style={{
+              transition: 'fill .35s, stroke .35s',
+            }}
+          />
 
-        {/* Label text */}
-        <text
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill={col.text}
-          fontSize={fontSize}
-          fontFamily="'JetBrains Mono', monospace"
-          fontWeight="700"
-          style={{ pointerEvents: 'none' }}
-        >
-          {shortLabel}
-        </text>
-
-        {/* "NOW" badge on current node */}
-        {isCurrent && (
-          <g>
-            <rect x={-26} y={R + 8} width={52} height={20} rx={10} fill="#16a34a" />
-            <text textAnchor="middle" y={R + 21} fill="#fff" fontSize={10}
-              fontFamily="'JetBrains Mono', monospace" fontWeight="800">▶ NOW</text>
-          </g>
-        )}
-
-        {/* Status micro-label for visited non-current nodes */}
-        {!isCurrent && (
-          <text textAnchor="middle" y={R + 18} fill={col.stroke}
-            fontSize={9} fontFamily="monospace" fontWeight="600" opacity={0.8}>
-            {st === 'base_case' ? '✓ base' : st === 'return' ? '↑ return' :
-             st === 'backtrack' ? '↩ back' : st === 'prune' ? '✂ prune' : ''}
+          {/* Label text */}
+          <text
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={col.text}
+            fontSize={fontSize}
+            fontFamily="'JetBrains Mono', monospace"
+            fontWeight="700"
+            style={{ pointerEvents: 'none' }}
+          >
+            {shortLabel}
           </text>
-        )}
+
+          {/* "NOW" badge on current node */}
+          {isCurrent && (
+            <g>
+              <rect x={-26} y={R + 8} width={52} height={20} rx={10} fill="#16a34a" />
+              <text textAnchor="middle" y={R + 21} fill="#fff" fontSize={10}
+                fontFamily="'JetBrains Mono', monospace" fontWeight="800">▶ NOW</text>
+            </g>
+          )}
+
+          {/* Status micro-label for visited non-current nodes */}
+          {!isCurrent && (
+            <text textAnchor="middle" y={R + 18} fill={col.stroke}
+              fontSize={9} fontFamily="monospace" fontWeight="600" opacity={0.8}>
+              {st === 'base_case' ? '✓ base' : st === 'return' ? '↑ return' :
+               st === 'backtrack' ? '↩ back' : st === 'prune' ? '✂ prune' : ''}
+            </text>
+          )}
+        </g>
       </g>
     );
   });
